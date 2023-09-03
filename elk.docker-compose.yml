@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql
+    command: --default-authentication-plugin=mysql_native_password --slow-query-log=1 --long_query_time=0.00001 --slow_query_log_file=/var/log/slow_query.log
+    restart: always
+    ports:
+      - 3306:3306
+    volumes:
+      - ./slow_query.log:/var/log/slow_query.log:rw
+      - ./mysqldata:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+
+  # ELK stack
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xmx1g
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.8.0
+    volumes:
+      - ./logstash/:/etc/logstash/conf.d/
+      - ./slow_query.log:/var/log/slow_query.log
+    command: logstash -f /etc/logstash/conf.d/logstash.conf
+    depends_on:
+      -  elasticsearch
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.8.0
+    ports:
+      - 5602:5601
+    depends_on:
+      - elasticsearch
+    volumes:
+      - ./kibana/:/opt/kibana/config/
+
+  filebeat-elk:
+    image: docker.elastic.co/beats/filebeat:8.8.0
+    depends_on:
+      - logstash
+    volumes:
+      - ./slow_query.log:/usr/share/filebeat/slow_query.log
+      - ./filebeat-elk/filebeat.yml:/usr/share/filebeat/filebeat.yml
+    command: ["--strict.perms=false"]
+
+volumes:
+  es_data:

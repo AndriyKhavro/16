@@ -65,4 +65,3 @@ volumes:
   mongodb_data:
   os_data:
   graylog_data:
-  graylog_journal:

@@ -1,0 +1,9 @@
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /usr/share/filebeat/slow_query.log
+  start_position: beginning
+
+output.logstash:
+  hosts: ["graylog:5044"]
