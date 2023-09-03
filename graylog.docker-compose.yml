@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql
+    command: --default-authentication-plugin=mysql_native_password --slow-query-log=1 --long_query_time=0.00001 --slow_query_log_file=/var/log/slow_query.log
+    restart: always
+    ports:
+      - 3306:3306
+    volumes:
+      - ./slow_query.log:/var/log/slow_query.log:rw
+      - ./mysqldata:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+
+  # Graylog stack
+  mongodb:
+    image: mongo:6.0.9
+    volumes:
+      - mongodb_data:/data/db
+
+  opensearch:
+    image: opensearchproject/opensearch:2.4.1
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - OPENSEARCH_JAVA_OPTS=-Xmx1g
+    ulimits:
+      memlock:
+        hard: -1
+        soft: -1
+    volumes:
+      - os_data:/usr/share/opensearch/data
+
+  graylog:
+    image: graylog/graylog:5.1.4
+    depends_on:
+      - mongodb
+      - opensearch
+    environment:
+      GRAYLOG_NODE_ID_FILE: "/usr/share/graylog/data/config/node-id"
+      GRAYLOG_PASSWORD_SECRET: somepasswordpepper
+      GRAYLOG_ROOT_PASSWORD_SHA2: 8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      GRAYLOG_HTTP_EXTERNAL_URI: "http://localhost:9000/"
+      GRAYLOG_HTTP_BIND_ADDRESS: "0.0.0.0:9000"
+      GRAYLOG_ELASTICSEARCH_HOSTS: "http://opensearch:9200"
+      GRAYLOG_MONGODB_URI: "mongodb://mongodb:27017/graylog"
+    entrypoint: /usr/bin/tini -- wait-for-it opensearch:9200 --  /docker-entrypoint.sh
+    ports:
+      - 9000:9000 # Graylog web interface and REST API
+    volumes:
+      - graylog_data:/usr/share/graylog/data/data
+
+
+  filebeat-graylog:
+    image: docker.elastic.co/beats/filebeat:8.8.0
+    depends_on:
+      - graylog
+    volumes:
+      - ./slow_query.log:/usr/share/filebeat/slow_query.log
+      - ./filebeat-graylog/filebeat.yml:/usr/share/filebeat/filebeat.yml
+    command: ["--strict.perms=false"]
+
+volumes:
+  mongodb_data:
+  os_data:
+  graylog_data:
+  graylog_journal:
